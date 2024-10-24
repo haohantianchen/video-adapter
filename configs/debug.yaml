@@ -1,0 +1,43 @@
+pretrained_model_path: "runwayml/stable-diffusion-v1-5"
+motion_module_path: "/raid/lurenjie/CVPR2025/animatediff-cli-prompt-travel/data/models/motion-module/mm_sd_v15_v2.ckpt"
+infer_config_path: "/raid/lurenjie/CVPR2025/our_train_script/configs/inference/default.json"
+
+
+output_dir: "./outputs/dance"
+
+train_data:
+  video_path: "/raid/cvg_data/lurenjie/p2p/stylize/project/videos/dance_246_resized.mp4"
+  prompt: "((best quality)), ((masterpiece)), ((realistic)), solo, 1girl, beautiful girl, white shorts, white tank top, dancing, smiling, high-resolution, 4k"
+  n_sample_frames: 16
+  width: 512
+  height: 680
+  sample_start_idx: 0
+  sample_frame_rate: 2
+
+validation_data:
+  prompts:
+    - "((best quality)), ((masterpiece)), ((realistic)), solo, 1boy, white shorts, white tank top, dancing, smiling, high-resolution, 4k"
+    - "((best quality)), ((masterpiece)), ((realistic)), solo, 1girl, beautiful girl, blue shorts, blue tank top, dancing, smiling, high-resolution, 4k"
+  video_length: 16
+  width: 512
+  height: 680
+  num_inference_steps: 50
+  guidance_scale: 12.5
+  use_inv_latent: True
+  num_inv_steps: 50
+
+learning_rate: 3e-5
+train_batch_size: 1
+max_train_steps: 500
+checkpointing_steps: 1000
+validation_steps: 100
+trainable_modules:
+  - "attn1.to_q"
+  - "attn2.to_q"
+  - "attn_temp"
+
+seed: 33
+mixed_precision: fp16
+use_8bit_adam: False
+gradient_checkpointing: True
+enable_xformers_memory_efficient_attention: True
