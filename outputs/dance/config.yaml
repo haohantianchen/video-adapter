@@ -1,0 +1,76 @@
+pretrained_model_path: /raid/lurenjie/AnimateDiff/models/StableDiffusion/stable-diffusion-v1-5
+motion_module_path: /raid/lurenjie/CVPR2025/animatediff-cli-prompt-travel/data/models/motion-module/mm_sd_v15_v2.ckpt
+unet_additional_kwargs:
+  use_motion_module: true
+  motion_module_resolutions:
+  - 1
+  - 2
+  - 4
+  - 8
+  unet_use_cross_frame_attention: false
+  unet_use_temporal_attention: false
+  motion_module_type: Vanilla
+  motion_module_kwargs:
+    num_attention_heads: 8
+    num_transformer_block: 1
+    attention_block_types:
+    - Temporal_Self
+    - Temporal_Self
+    temporal_position_encoding: true
+    temporal_position_encoding_max_len: 32
+    temporal_attention_dim_div: 1
+    zero_initialize: true
+noise_scheduler_kwargs:
+  num_train_timesteps: 1000
+  beta_start: 0.00085
+  beta_end: 0.012
+  beta_schedule: linear
+  steps_offset: 1
+  clip_sample: false
+output_dir: ./outputs/dance
+train_data:
+  video_path: /raid/cvg_data/lurenjie/p2p/stylize/project/videos/dance_246_resized.mp4
+  prompt: ((best quality)), ((masterpiece)), ((realistic)), solo, 1girl, beautiful
+    girl, white shorts, white tank top, dancing, smiling, high-resolution, 4k
+  n_sample_frames: 16
+  width: 512
+  height: 680
+  sample_start_idx: 0
+  sample_frame_rate: 2
+validation_data:
+  prompts:
+  - ((best quality)), ((masterpiece)), ((realistic)), solo, 1boy, white shorts, white
+    tank top, dancing, smiling, high-resolution, 4k
+  - ((best quality)), ((masterpiece)), ((realistic)), solo, 1girl, beautiful girl,
+    blue shorts, blue tank top, dancing, smiling, high-resolution, 4k
+  video_length: 16
+  width: 512
+  height: 680
+  num_inference_steps: 50
+  guidance_scale: 12.5
+  use_inv_latent: true
+  num_inv_steps: 50
+validation_steps: 100
+trainable_modules:
+- attn1.to_q
+- attn2.to_q
+- attn_temp
+train_batch_size: 1
+max_train_steps: 500
+learning_rate: 3.0e-05
+scale_lr: false
+lr_scheduler: constant
+lr_warmup_steps: 0
+adam_beta1: 0.9
+adam_beta2: 0.999
+adam_weight_decay: 0.01
+adam_epsilon: 1.0e-08
+max_grad_norm: 1.0
+gradient_accumulation_steps: 1
+gradient_checkpointing: true
+checkpointing_steps: 1000
+resume_from_checkpoint: null
+mixed_precision: fp16
+use_8bit_adam: false
+enable_xformers_memory_efficient_attention: true
+seed: 33

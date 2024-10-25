@@ -27,9 +27,6 @@ from tuneavideo.models.unet import UNet3DConditionModel
 from tuneavideo.data.dataset import TuneAVideoDataset
 from tuneavideo.pipelines.pipeline_tuneavideo import TuneAVideoPipeline
 from tuneavideo.util import save_videos_grid, ddim_inversion
-from tuneavideo.settings import (CKPT_EXTENSIONS, InferenceConfig,
-                                  ModelConfig, get_infer_config,
-                                  get_model_config)
 from einops import rearrange
 
 
@@ -42,7 +39,10 @@ logger = get_logger(__name__, log_level="INFO")
 def main(
     pretrained_model_path: str,
     motion_module_path: str,
-    infer_config_path: str,
+
+    unet_additional_kwargs: Dict,
+    noise_scheduler_kwargs:None,
+
     output_dir: str,
     train_data: Dict,
     validation_data: Dict,
@@ -115,7 +115,7 @@ def main(
         pretrained_model_path,
         motion_module_path,
         subfolder="unet",
-        infer_config.unet_additional_kwargs,
+        unet_additional_kwargs=unet_additional_kwargs
     )
 
     # Freeze vae and text_encoder
@@ -371,7 +371,7 @@ def main(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", type=str, default="/raid/cvg_data/lurenjie/Tune-A-Video/configs/man-skiing.yaml")
+    parser.add_argument("--config", type=str, default="/raid/lurenjie/CVPR2025/our_train_script/configs/debug.yaml")
     args = parser.parse_args()
 
     main(**OmegaConf.load(args.config))
