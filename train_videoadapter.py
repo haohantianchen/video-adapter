@@ -24,6 +24,7 @@ from tqdm.auto import tqdm
 from transformers import CLIPTextModel, CLIPTokenizer
 
 from tuneavideo.models.unet import UNet3DConditionModel
+from tuneavideo.models.pose_guider import PoseGuider
 from tuneavideo.data.dataset import TuneAVideoDataset
 from tuneavideo.pipelines.pipeline_tuneavideo import TuneAVideoPipeline
 from tuneavideo.util import save_videos_grid, ddim_inversion
@@ -39,6 +40,7 @@ logger = get_logger(__name__, log_level="INFO")
 def main(
     pretrained_model_path: str,
     motion_module_path: str,
+    controlnet_path: str,
 
     unet_additional_kwargs: Dict,
     noise_scheduler_kwargs:None,
@@ -71,6 +73,7 @@ def main(
     use_8bit_adam: bool = False,
     enable_xformers_memory_efficient_attention: bool = True,
     seed: Optional[int] = None,
+    skeleton_path: Optional[str] = None,
 ):
     *_, config = inspect.getargvalues(inspect.currentframe())
 
@@ -118,9 +121,30 @@ def main(
         unet_additional_kwargs=unet_additional_kwargs
     )
 
+    # 新增controlnet
+    pose_guider = PoseGuider(
+        conditioning_embedding_channels=320, block_out_channels=(16, 32, 96, 256)
+    )
+    # load pretrained controlnet-openpose params for pose_guider
+    controlnet_openpose_state_dict = torch.load(controlnet_path)
+    state_dict_to_load = {}
+    for k in controlnet_openpose_state_dict.keys():
+        if k.startswith("controlnet_cond_embedding.") and k.find("conv_out") < 0:
+            new_k = k.replace("controlnet_cond_embedding.", "")
+            state_dict_to_load[new_k] = controlnet_openpose_state_dict[k]
+    miss, _ = pose_guider.load_state_dict(state_dict_to_load, strict=False)
+    logger.info(f"Missing key for pose guider: {len(miss)}")
+
+
+
+    
+
     # Freeze vae and text_encoder
     vae.requires_grad_(False)
     text_encoder.requires_grad_(False)
+
+    # 新增controlnet fixed
+    pose_guider.requires_grad_(False)
 
     unet.requires_grad_(False)
     for name, module in unet.named_modules():
@@ -209,6 +233,9 @@ def main(
     # Move text_encode and vae to gpu and cast to weight_dtype
     text_encoder.to(accelerator.device, dtype=weight_dtype)
     vae.to(accelerator.device, dtype=weight_dtype)
+    
+    pose_guider.to(accelerator.device, dtype=weight_dtype)
+    unet.to(accelerator.device, dtype=weight_dtype)
 
     # We need to recalculate our total training steps as the size of the training dataloader may have changed.
     num_update_steps_per_epoch = math.ceil(len(train_dataloader) / gradient_accumulation_steps)
@@ -267,11 +294,20 @@ def main(
             with accelerator.accumulate(unet):
                 # Convert videos to latent space
                 pixel_values = batch["pixel_values"].to(weight_dtype)
+
                 video_length = pixel_values.shape[1]
                 pixel_values = rearrange(pixel_values, "b f c h w -> (b f) c h w")
                 latents = vae.encode(pixel_values).latent_dist.sample()
                 latents = rearrange(latents, "(b f) c h w -> b c f h w", f=video_length)
                 latents = latents * 0.18215
+
+
+
+                # 新增controlnet condition input
+                skeleton = batch["pose"].to(weight_dtype)
+                # skeleton = skeleton.unsqueeze(2)
+                pose_cond_tensor = skeleton.to(device=latents.device)
+                pose_fea = pose_guider(pose_cond_tensor)
 
                 # Sample noise that we'll add to the latents
                 noise = torch.randn_like(latents)
@@ -295,8 +331,9 @@ def main(
                 else:
                     raise ValueError(f"Unknown prediction type {noise_scheduler.prediction_type}")
 
+
                 # Predict the noise residual and compute loss
-                model_pred = unet(noisy_latents, timesteps, encoder_hidden_states).sample
+                model_pred = unet(noisy_latents, timesteps, encoder_hidden_states, pose_cond_fea=pose_fea, train_or_sample='train').sample
                 loss = F.mse_loss(model_pred.float(), target.float(), reduction="mean")
 
                 # Gather the losses across all processes for logging (if we use distributed training).

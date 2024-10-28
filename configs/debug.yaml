@@ -1,5 +1,6 @@
 pretrained_model_path: "/raid/lurenjie/AnimateDiff/models/StableDiffusion/stable-diffusion-v1-5"
 motion_module_path: "/raid/lurenjie/CVPR2025/animatediff-cli-prompt-travel/data/models/motion-module/mm_sd_v15_v2.ckpt"
+controlnet_path: "/raid/lurenjie/CVPR2025/our_train_script/weights/control_v11p_sd15_openpose/diffusion_pytorch_model.bin"
 
 
 unet_additional_kwargs:
@@ -27,24 +28,26 @@ noise_scheduler_kwargs:
   clip_sample:         false
 
 
-output_dir: "./outputs/dance"
+output_dir: "./outputs/debug"
 
 train_data:
-  video_path: "/raid/cvg_data/lurenjie/p2p/stylize/project/videos/dance_246_resized.mp4"
-  prompt: "((best quality)), ((masterpiece)), ((realistic)), solo, 1girl, beautiful girl, white shorts, white tank top, dancing, smiling, high-resolution, 4k"
-  n_sample_frames: 16
+  video_path: "/raid/lurenjie/CVPR2025/our_train_script/dataset/rgb/tiktok300.mp4"
+  skeleton_path: '/raid/lurenjie/CVPR2025/our_train_script/dataset/control/tiktok300.mp4'
+  prompt: "blonde woman in white top and jeans standing in a bedroom"
+  n_sample_frames: 24
   width: 512
-  height: 680
-  sample_start_idx: 0
-  sample_frame_rate: 2
+  height: 512
+  sample_start_idx: 20
+  sample_frame_rate: 1
+
 
 validation_data:
   prompts:
-    - "((best quality)), ((masterpiece)), ((realistic)), solo, 1boy, white shorts, white tank top, dancing, smiling, high-resolution, 4k"
-    - "((best quality)), ((masterpiece)), ((realistic)), solo, 1girl, beautiful girl, blue shorts, blue tank top, dancing, smiling, high-resolution, 4k"
-  video_length: 16
+    - "blonde woman in white top and jeans standing in a bedroom"
+    - "blonde man in black top and jeans standing in a park"
+  video_length: 24
   width: 512
-  height: 680
+  height: 512
   num_inference_steps: 50
   guidance_scale: 12.5
   use_inv_latent: True
@@ -52,7 +55,7 @@ validation_data:
 
 learning_rate: 3e-5
 train_batch_size: 1
-max_train_steps: 500
+max_train_steps: 5000
 checkpointing_steps: 1000
 validation_steps: 100
 trainable_modules:
@@ -61,7 +64,7 @@ trainable_modules:
   - "attn_temp"
 
 seed: 33
-mixed_precision: fp16
+mixed_precision: 
 use_8bit_adam: False
 gradient_checkpointing: True
 enable_xformers_memory_efficient_attention: True

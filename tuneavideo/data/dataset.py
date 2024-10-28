@@ -9,6 +9,7 @@ class TuneAVideoDataset(Dataset):
     def __init__(
             self,
             video_path: str,
+            skeleton_path: str,
             prompt: str,
             width: int = 512,
             height: int = 512,
@@ -26,19 +27,29 @@ class TuneAVideoDataset(Dataset):
         self.sample_start_idx = sample_start_idx
         self.sample_frame_rate = sample_frame_rate
 
+        self.skeleton_path = skeleton_path
+
     def __len__(self):
         return 1
 
     def __getitem__(self, index):
         # load and sample video frames
         vr = decord.VideoReader(self.video_path, width=self.width, height=self.height)
+        # 新增
+        vcr = decord.VideoReader(self.skeleton_path, width=self.width, height=self.height)
         sample_index = list(range(self.sample_start_idx, len(vr), self.sample_frame_rate))[:self.n_sample_frames]
         video = vr.get_batch(sample_index)
         video = rearrange(video, "f h w c -> f c h w")
+        # 新增
+        video_c = vcr.get_batch(sample_index)
+        # video_c = rearrange( video_c, "f h w c -> f c h w")
+        video_c = rearrange( video_c, "f h w c -> c f h w")
+
 
         example = {
             "pixel_values": (video / 127.5 - 1.0),
-            "prompt_ids": self.prompt_ids
+            "prompt_ids": self.prompt_ids,
+            "pose": (video_c / 127.5 - 1.0)
         }
 
         return example
