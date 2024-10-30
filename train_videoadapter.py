@@ -16,7 +16,7 @@ import transformers
 from accelerate import Accelerator
 from accelerate.logging import get_logger
 from accelerate.utils import set_seed
-from diffusers import AutoencoderKL, DDPMScheduler, DDIMScheduler
+from diffusers import AutoencoderKL, DDPMScheduler, DDIMScheduler, ControlNetModel
 from diffusers.optimization import get_scheduler
 from diffusers.utils import check_min_version
 from diffusers.utils.import_utils import is_xformers_available
@@ -29,6 +29,8 @@ from tuneavideo.data.dataset import TuneAVideoDataset
 from tuneavideo.pipelines.pipeline_tuneavideo import TuneAVideoPipeline
 from tuneavideo.util import save_videos_grid, ddim_inversion
 from einops import rearrange
+
+from tuneavideo.pipelines.context import get_context_scheduler
 
 
 # Will error if the minimal version of diffusers is not installed. Remove at your own risks.
@@ -122,18 +124,19 @@ def main(
     )
 
     # 新增controlnet
-    pose_guider = PoseGuider(
-        conditioning_embedding_channels=320, block_out_channels=(16, 32, 96, 256)
-    )
-    # load pretrained controlnet-openpose params for pose_guider
-    controlnet_openpose_state_dict = torch.load(controlnet_path)
-    state_dict_to_load = {}
-    for k in controlnet_openpose_state_dict.keys():
-        if k.startswith("controlnet_cond_embedding.") and k.find("conv_out") < 0:
-            new_k = k.replace("controlnet_cond_embedding.", "")
-            state_dict_to_load[new_k] = controlnet_openpose_state_dict[k]
-    miss, _ = pose_guider.load_state_dict(state_dict_to_load, strict=False)
-    logger.info(f"Missing key for pose guider: {len(miss)}")
+    # pose_guider = PoseGuider(
+    #     conditioning_embedding_channels=320, block_out_channels=(16, 32, 96, 256)
+    # )
+    # # load pretrained controlnet-openpose params for pose_guider
+    # controlnet_openpose_state_dict = torch.load(controlnet_path)
+    # state_dict_to_load = {}
+    # for k in controlnet_openpose_state_dict.keys():
+    #     if k.startswith("controlnet_cond_embedding.") and k.find("conv_out") < 0:
+    #         new_k = k.replace("controlnet_cond_embedding.", "")
+    #         state_dict_to_load[new_k] = controlnet_openpose_state_dict[k]
+    # miss, _ = pose_guider.load_state_dict(state_dict_to_load, strict=False)
+    # logger.info(f"Missing key for pose guider: {len(miss)}")
+    pose_guider = ControlNetModel.from_single_file(controlnet_path)
 
 
 
@@ -284,6 +287,9 @@ def main(
     for epoch in range(first_epoch, num_train_epochs):
         unet.train()
         train_loss = 0.0
+
+
+
         for step, batch in enumerate(train_dataloader):
             # Skip steps until we reach the resumed step
             if resume_from_checkpoint and epoch == first_epoch and step < resume_step:
@@ -305,9 +311,8 @@ def main(
 
                 # 新增controlnet condition input
                 skeleton = batch["pose"].to(weight_dtype)
-                # skeleton = skeleton.unsqueeze(2)
                 pose_cond_tensor = skeleton.to(device=latents.device)
-                pose_fea = pose_guider(pose_cond_tensor)
+                # pose_fea = pose_guider(pose_cond_tensor)
 
                 # Sample noise that we'll add to the latents
                 noise = torch.randn_like(latents)
@@ -331,9 +336,36 @@ def main(
                 else:
                     raise ValueError(f"Unknown prediction type {noise_scheduler.prediction_type}")
 
+                # 新增context_scheduler选择指定帧进行noise predict
+                context_scheduler = get_context_scheduler("uniform")
+                for context in context_scheduler(
+                    step, _, latents.shape[2], train_data.context, train_data.sample_frame_rate, train_data.overlap):
 
-                # Predict the noise residual and compute loss
-                model_pred = unet(noisy_latents, timesteps, encoder_hidden_states, pose_cond_fea=pose_fea, train_or_sample='train').sample
+                    # 新增controlnet process后的输入
+                    controlnet_result = []
+                    for frame_no in context:
+                        down_samples, mid_sample = pose_guider(latents[:,:,frame_no], timesteps, encoder_hidden_states, pose_cond_tensor[:,frame_no], return_dict=False,)
+
+                        for ii in range(len(down_samples)):
+                            down_samples[ii] = rearrange(down_samples[ii], "(b f) c h w -> b c f h w", f=1)
+                        mid_sample = rearrange(mid_sample, "(b f) c h w -> b c f h w", f=1)
+
+                        controlnet_result.append((down_samples, mid_sample))
+                    # print(controlnet_result)
+                    
+                    down_block_additional_residuals = []
+                    for i in range(len(controlnet_result[0][0])):
+                        down_block_res_samples = torch.cat([elem[0][i] for elem in controlnet_result], dim=2)
+                        down_block_additional_residuals.append(down_block_res_samples)
+                    
+                    mid_block_additional_residual = torch.cat([elem[1] for elem in controlnet_result], dim=2)
+
+
+                    # Predict the noise residual and compute loss
+                    # model_pred = unet(noisy_latents, timesteps, encoder_hidden_states, pose_cond_fea=pose_fea, train_or_sample='train').sample
+                    # loss = F.mse_loss(model_pred.float(), target.float(), reduction="mean")
+                    model_pred = unet(noisy_latents[:,:,context], timesteps, encoder_hidden_states, down_block_additional_residuals=down_block_additional_residuals, mid_block_additional_residual=mid_block_additional_residual).sample
+                
                 loss = F.mse_loss(model_pred.float(), target.float(), reduction="mean")
 
                 # Gather the losses across all processes for logging (if we use distributed training).

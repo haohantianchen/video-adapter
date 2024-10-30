@@ -1,6 +1,6 @@
 pretrained_model_path: "/raid/lurenjie/AnimateDiff/models/StableDiffusion/stable-diffusion-v1-5"
 motion_module_path: "/raid/lurenjie/CVPR2025/animatediff-cli-prompt-travel/data/models/motion-module/mm_sd_v15_v2.ckpt"
-controlnet_path: "/raid/lurenjie/CVPR2025/our_train_script/weights/control_v11p_sd15_openpose/diffusion_pytorch_model.bin"
+controlnet_path: "https://huggingface.co/lllyasviel/ControlNet-v1-1/blob/main/control_v11p_sd15_openpose.pth"
 
 
 unet_additional_kwargs:
@@ -39,6 +39,8 @@ train_data:
   height: 512
   sample_start_idx: 20
   sample_frame_rate: 1
+  context: 16
+  overlap: 8
 
 
 validation_data:

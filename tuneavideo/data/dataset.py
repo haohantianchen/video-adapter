@@ -16,6 +16,8 @@ class TuneAVideoDataset(Dataset):
             n_sample_frames: int = 8,
             sample_start_idx: int = 0,
             sample_frame_rate: int = 1,
+            context: int = 1,
+            overlap: int = 1,
     ):
         self.video_path = video_path
         self.prompt = prompt
@@ -43,7 +45,7 @@ class TuneAVideoDataset(Dataset):
         # 新增
         video_c = vcr.get_batch(sample_index)
         # video_c = rearrange( video_c, "f h w c -> f c h w")
-        video_c = rearrange( video_c, "f h w c -> c f h w")
+        video_c = rearrange( video_c, "f h w c -> f c h w")
 
 
         example = {

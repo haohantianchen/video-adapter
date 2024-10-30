@@ -313,6 +313,7 @@ class UNet3DConditionModel(ModelMixin, ConfigMixin):
         timestep: Union[Tensor, float, int],
         encoder_hidden_states: Tensor,
         class_labels: Optional[Tensor] = None,
+        pose_cond_fea: Optional[torch.Tensor] = None,
         attention_mask: Optional[Tensor] = None,
         cross_attention_kwargs: Optional[Dict[str, Any]] = None,
         added_cond_kwargs: Optional[Dict[str, torch.Tensor]] = None,
@@ -419,6 +420,8 @@ class UNet3DConditionModel(ModelMixin, ConfigMixin):
 
         # 2. pre-process
         sample = self.conv_in(sample)
+        if pose_cond_fea is not None:
+            sample = sample + pose_cond_fea
 
         # 3. down
         down_block_res_samples = (sample,)
